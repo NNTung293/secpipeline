@@ -44,9 +44,14 @@ jobs:
             --config=p/security-audit \
             --sarif \
             --output=semgrep-results.sarif \
+            app/ || true
+          semgrep scan \
+            --config=p/python \
+            --config=p/owasp-top-ten \
+            --config=p/security-audit \
             --json \
-            --json-output=semgrep-results.json \
-            app/
+            --output=semgrep-results.json \
+            app/ || true
         continue-on-error: true
       - name: Upload Semgrep SARIF
         if: always()
