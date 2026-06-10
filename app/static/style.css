@@ -1,0 +1,56 @@
+/* SecPipeline Demo App - Minimal Custom Styles */
+
+body {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+main {
+    flex: 1;
+}
+
+/* Warning banner for intentionally vulnerable notice */
+.vuln-warning {
+    font-size: 0.9rem;
+    padding: 0.5rem 1rem;
+    border-radius: 0 !important;
+    background-color: #dc3545;
+    color: #fff;
+    border: none;
+}
+
+/* Card spacing */
+.card {
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Navigation adjustments */
+.navbar-brand {
+    font-weight: bold;
+}
+
+/* Footer sticky bottom */
+footer {
+    margin-top: auto;
+}
+
+/* Form spacing */
+form .mb-3 {
+    margin-bottom: 1rem;
+}
+
+/* Table adjustments */
+.table th {
+    background-color: #f8f9fa;
+}
+
+/* Search input */
+.input-group .form-control {
+    border-right: none;
+}
+
+/* Flash message spacing */
+.alert {
+    margin-bottom: 0.5rem;
+}

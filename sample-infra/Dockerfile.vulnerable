@@ -1,0 +1,81 @@
+# =============================================================================
+# ⚠️ INTENTIONALLY VULNERABLE DOCKERFILE
+# =============================================================================
+# This Dockerfile contains DELIBERATE security anti-patterns for educational
+# purposes and future IaC scanning tool integration (e.g., Checkov, tfsec).
+#
+# DO NOT use this as a template for production Dockerfiles!
+# =============================================================================
+
+# VULNERABILITY: Using 'latest' tag — not pinned to a specific version
+# Risk: Builds are not reproducible; could pull a compromised image
+FROM ubuntu:latest
+
+# VULNERABILITY: Hardcoded secrets in environment variables
+# Risk: Secrets are visible in image history, logs, and container inspection
+ENV APP_DB_PASSWORD="SuperSecretPassword123!"
+ENV AWS_ACCESS_KEY_ID="AKIAIOSFODNN7EXAMPLE"
+ENV AWS_SECRET_ACCESS_KEY="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+ENV API_TOKEN="ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+ENV MYSQL_ROOT_PASSWORD="root123"
+
+# VULNERABILITY: Running apt-get without --no-install-recommends
+# Risk: Installs unnecessary packages, increasing attack surface and image size
+# VULNERABILITY: Not cleaning up apt cache
+# Risk: Bloated image with unnecessary cached data
+RUN apt-get update && \
+    apt-get install -y \
+    python3 \
+    python3-pip \
+    curl \
+    wget \
+    netcat-openbsd \
+    ssh \
+    telnet \
+    vim \
+    net-tools \
+    nmap \
+    && echo "No cleanup performed"
+
+# VULNERABILITY: Using ADD with a URL instead of COPY
+# Risk: ADD from URL doesn't verify checksums; downloaded content could be tampered
+# Risk: ADD auto-extracts archives, which could be exploited
+ADD https://raw.githubusercontent.com/vishnubob/wait-for-it/master/wait-for-it.sh /usr/local/bin/wait-for-it.sh
+RUN chmod +x /usr/local/bin/wait-for-it.sh
+
+# VULNERABILITY: Setting overly permissive file permissions
+# Risk: World-writable directories can be abused by any process in the container
+RUN mkdir -p /app /data /tmp/uploads && \
+    chmod 777 /app /data /tmp/uploads
+
+# VULNERABILITY: COPY with overly broad context
+# Risk: May accidentally include .env, .git, secrets, or other sensitive files
+COPY . /app/
+
+WORKDIR /app
+
+# VULNERABILITY: Installing dependencies as root with no hash verification
+# Risk: Supply chain attack — packages could be compromised
+RUN pip3 install --break-system-packages flask requests pyyaml
+
+# VULNERABILITY: Exposing SSH port in a container
+# Risk: SSH in containers is an anti-pattern; containers should be immutable and ephemeral
+# Risk: Increases attack surface significantly
+EXPOSE 22
+
+# VULNERABILITY: Exposing more ports than necessary
+EXPOSE 5000 8080 8443 3306
+
+# VULNERABILITY: No HEALTHCHECK defined
+# Risk: Orchestrators cannot determine if the application is healthy
+# (Intentionally omitted)
+
+# VULNERABILITY: Running as root (no USER directive)
+# Risk: If the container is compromised, the attacker has root access
+# Best practice: Create a non-root user and switch to it
+# USER appuser  # <-- This SHOULD be here but is intentionally missing
+
+# VULNERABILITY: Using shell form instead of exec form for CMD
+# Risk: Shell form wraps command in /bin/sh -c, which doesn't forward signals properly
+# Risk: PID 1 will be the shell, not the application, causing graceful shutdown issues
+CMD python3 app.py

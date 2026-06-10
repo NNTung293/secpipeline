@@ -1,0 +1,267 @@
+name: "🛡️ SecPipeline - Security Scanning"
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:  # Manual trigger
+
+permissions:
+  contents: read
+  security-events: write  # For SARIF upload
+  actions: read
+
+jobs:
+  # ===== Stage 1: Secret Scanning =====
+  secret-scanning:
+    name: "🔑 Secret Scanning (Gitleaks)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true  # Don't block other stages
+      # Note: Gitleaks action auto-uploads SARIF
+
+  # ===== Stage 2: SAST - Semgrep =====
+  sast-semgrep:
+    name: "🔍 SAST - Semgrep"
+    runs-on: ubuntu-latest
+    container:
+      image: returntocorp/semgrep
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Semgrep
+        run: |
+          semgrep scan \
+            --config=p/python \
+            --config=p/owasp-top-ten \
+            --config=p/security-audit \
+            --sarif \
+            --output=semgrep-results.sarif \
+            --json \
+            --json-output=semgrep-results.json \
+            app/
+        continue-on-error: true
+      - name: Upload Semgrep SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: semgrep-results.sarif
+          category: semgrep
+      - name: Upload Semgrep JSON
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: semgrep-results
+          path: semgrep-results.json
+
+  # ===== Stage 3: SAST - Bandit =====
+  sast-bandit:
+    name: "🐍 SAST - Bandit (Python)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install Bandit
+        run: pip install bandit[sarif]
+      - name: Run Bandit
+        run: |
+          bandit -r app/ -f sarif -o bandit-results.sarif || true
+          bandit -r app/ -f json -o bandit-results.json || true
+        continue-on-error: true
+      - name: Upload Bandit SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: bandit-results.sarif
+          category: bandit
+      - name: Upload Bandit JSON
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-results
+          path: bandit-results.json
+
+  # ===== Stage 4: SCA - Dependency Scanning =====
+  sca-scan:
+    name: "📦 SCA - Dependency Scan (Trivy)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Trivy (Filesystem)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-sca-results.sarif'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+        continue-on-error: true
+      - name: Run Trivy (JSON output)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'json'
+          output: 'trivy-sca-results.json'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+        continue-on-error: true
+      - name: Run pip-audit
+        run: |
+          pip install pip-audit
+          pip-audit -r requirements.txt -f json -o pip-audit-results.json || true
+        continue-on-error: true
+      - name: Upload Trivy SCA SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-sca-results.sarif
+          category: trivy-sca
+      - name: Upload SCA results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sca-results
+          path: |
+            trivy-sca-results.json
+            pip-audit-results.json
+
+  # ===== Stage 5: Container Scanning =====
+  container-scan:
+    name: "🐳 Container Scan (Trivy)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Docker image
+        run: docker build -t secpipeline:latest .
+      - name: Run Trivy (Image)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'secpipeline:latest'
+          format: 'sarif'
+          output: 'trivy-image-results.sarif'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+        continue-on-error: true
+      - name: Run Trivy Image (JSON)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'secpipeline:latest'
+          format: 'json'
+          output: 'trivy-image-results.json'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+        continue-on-error: true
+      - name: Upload Trivy Image SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-image-results.sarif
+          category: trivy-image
+      - name: Upload Container scan results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: container-scan-results
+          path: trivy-image-results.json
+
+  # ===== Stage 6: DAST - OWASP ZAP =====
+  dast-scan:
+    name: "🌐 DAST - OWASP ZAP"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and start application
+        run: |
+          docker compose up -d --build
+          echo "Waiting for app to be ready..."
+          for i in $(seq 1 30); do
+            if curl -s http://localhost:5000/health > /dev/null 2>&1; then
+              echo "App is ready!"
+              break
+            fi
+            echo "Waiting... ($i/30)"
+            sleep 2
+          done
+      - name: OWASP ZAP Baseline Scan
+        uses: zaproxy/action-baseline@v0.14.0
+        with:
+          target: 'http://localhost:5000'
+          rules_file_name: '.zap/rules.tsv'
+          cmd_options: '-a -j'
+          allow_issue_writing: false
+        continue-on-error: true
+      - name: Upload ZAP Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-results
+          path: |
+            report_html.html
+            report_json.json
+      - name: Stop application
+        if: always()
+        run: docker compose down
+
+  # ===== Stage 7: Security Report =====
+  security-report:
+    name: "📊 Security Report"
+    runs-on: ubuntu-latest
+    needs: [secret-scanning, sast-semgrep, sast-bandit, sca-scan, container-scan, dast-scan]
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install jinja2
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: scan-results/
+      - name: Generate Security Report
+        run: python scripts/generate_report.py
+      - name: Upload Security Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-report
+          path: security-report.html
+      - name: Security Gate
+        run: |
+          echo "🔒 Checking Security Gate..."
+          python -c "
+          import json, sys, os
+
+          critical_count = 0
+          high_count = 0
+
+          results_dir = 'scan-results'
+          for root, dirs, files in os.walk(results_dir):
+              for f in files:
+                  if f.endswith('.json'):
+                      try:
+                          with open(os.path.join(root, f)) as fh:
+                              data = json.load(fh)
+                              content = json.dumps(data).upper()
+                              critical_count += content.count('\"CRITICAL\"')
+                              high_count += content.count('\"HIGH\"')
+                      except: pass
+
+          print(f'🚨 Critical: {critical_count}')
+          print(f'⚠️  High: {high_count}')
+
+          if critical_count > 0:
+              print('❌ Security Gate: FAILED (Critical vulnerabilities found)')
+              sys.exit(1)
+          else:
+              print('✅ Security Gate: PASSED')
+          "

@@ -1,0 +1,153 @@
+# =============================================================================
+# ⚠️ INTENTIONALLY INSECURE DOCKER COMPOSE
+# =============================================================================
+# This docker-compose file contains DELIBERATE security anti-patterns for
+# educational purposes and future IaC scanning tool integration.
+#
+# DO NOT use this as a template for production deployments!
+# =============================================================================
+
+version: "3.8"
+
+services:
+  # -------------------------------------------------------------------------
+  # Vulnerable Web Application
+  # -------------------------------------------------------------------------
+  webapp:
+    build:
+      context: ..
+      dockerfile: sample-infra/Dockerfile.vulnerable
+    container_name: secpipeline-webapp-insecure
+
+    # VULNERABILITY: Privileged mode — gives container full host access
+    # Risk: Container can access all host devices, bypass all security modules
+    privileged: true
+
+    # VULNERABILITY: Host network mode — no network isolation
+    # Risk: Container shares the host's network stack; can access all host services
+    network_mode: host
+
+    # VULNERABILITY: Dangerous volume mounts
+    volumes:
+      # Risk: Access to host's /etc — can read/modify passwd, shadow, hosts, etc.
+      - /etc:/host-etc
+
+      # Risk: Access to Docker socket — allows container to control Docker daemon
+      # This effectively gives root access to the host
+      - /var/run/docker.sock:/var/run/docker.sock
+
+      # Risk: Access to host's /proc — exposes process information and system config
+      - /proc:/host-proc
+
+      # Risk: Access to host's entire filesystem via root mount
+      - /:/host-root
+
+    # VULNERABILITY: Hardcoded secrets in environment variables
+    # Risk: Secrets visible in docker inspect, logs, and compose file
+    environment:
+      - DATABASE_URL=postgresql://admin:P@ssw0rd123!@db:5432/secpipeline
+      - SECRET_KEY=super-secret-key-do-not-share-this-ever
+      - JWT_SECRET=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.secret
+      - AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE
+      - AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+      - ADMIN_PASSWORD=admin123
+      - API_KEY=sk-fake-openai-api-key-1234567890abcdef
+      - SMTP_PASSWORD=EmailP@ssword!
+      - REDIS_PASSWORD=redis123
+
+    # VULNERABILITY: No resource limits
+    # Risk: Container can consume unlimited CPU and memory, leading to DoS
+    # Best practice: Set mem_limit, cpus, pids_limit
+    # mem_limit: 512m      # <-- Should be set
+    # cpus: "0.5"          # <-- Should be set
+    # pids_limit: 100      # <-- Should be set
+
+    # VULNERABILITY: No read-only filesystem
+    # Risk: Compromised container can write anywhere, install malware, modify binaries
+    # read_only: true      # <-- Should be set
+
+    # VULNERABILITY: No security options
+    # Risk: Missing AppArmor/seccomp profiles, no capability dropping
+    # security_opt:
+    #   - no-new-privileges:true  # <-- Should be set
+    #   - apparmor:docker-default # <-- Should be set
+
+    # VULNERABILITY: Adding dangerous Linux capabilities
+    # Risk: CAP_SYS_ADMIN is nearly equivalent to root
+    cap_add:
+      - SYS_ADMIN
+      - NET_ADMIN
+      - SYS_PTRACE
+      - NET_RAW
+
+    restart: always
+
+  # -------------------------------------------------------------------------
+  # Database with Insecure Configuration
+  # -------------------------------------------------------------------------
+  db:
+    image: postgres:latest  # VULNERABILITY: Unpinned image tag
+    container_name: secpipeline-db-insecure
+
+    # VULNERABILITY: Hardcoded database credentials
+    environment:
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=P@ssw0rd123!
+      - POSTGRES_DB=secpipeline
+
+    # VULNERABILITY: Database port exposed to all interfaces
+    # Risk: Database is accessible from outside the Docker network
+    ports:
+      - "0.0.0.0:5432:5432"
+
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      # VULNERABILITY: Mounting host directory without read-only
+      - /tmp/db-backups:/backups
+
+    # VULNERABILITY: No resource limits on database
+    # Risk: Unbounded memory/CPU usage could crash the host
+
+    # VULNERABILITY: No health check for database
+    # Risk: Dependent services may start before database is ready
+
+  # -------------------------------------------------------------------------
+  # Redis with No Authentication
+  # -------------------------------------------------------------------------
+  redis:
+    image: redis:latest  # VULNERABILITY: Unpinned image tag
+    container_name: secpipeline-redis-insecure
+
+    # VULNERABILITY: Redis without authentication (no --requirepass)
+    # Risk: Anyone on the network can access and modify cached data
+    command: redis-server
+
+    # VULNERABILITY: Exposed to all interfaces
+    ports:
+      - "0.0.0.0:6379:6379"
+
+    # VULNERABILITY: No resource limits
+
+  # -------------------------------------------------------------------------
+  # Debug Container (Should Not Exist in Production)
+  # -------------------------------------------------------------------------
+  debug:
+    image: ubuntu:latest  # VULNERABILITY: Unpinned, non-minimal image
+    container_name: secpipeline-debug
+
+    # VULNERABILITY: Privileged debug container
+    privileged: true
+
+    # VULNERABILITY: Runs as root with full host access
+    volumes:
+      - /:/mnt/host
+      - /var/run/docker.sock:/var/run/docker.sock
+
+    # VULNERABILITY: Interactive shell — container stays running forever
+    command: tail -f /dev/null
+    stdin_open: true
+    tty: true
+
+volumes:
+  db-data:
+    driver: local

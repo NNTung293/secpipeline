@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>Recent Posts</h1>
+<hr>
+
+{% if posts %}
+    <div class="row">
+        {% for post in posts %}
+        <div class="col-md-6 mb-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">{{ post['title'] }}</h5>
+                    <p class="card-text">{{ post['content'] }}</p>
+                    <small class="text-muted">Post #{{ post['id'] }}</small>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+{% else %}
+    <div class="alert alert-info">
+        No posts yet. Check back later!
+    </div>
+{% endif %}
+{% endblock %}

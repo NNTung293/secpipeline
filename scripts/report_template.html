@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🛡️ SecPipeline Security Report</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* ===== Reset & Base ===== */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+            background: linear-gradient(135deg, #0d1117 0%, #161b22 50%, #0d1117 100%);
+            color: #e6edf3;
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+
+        /* ===== Container ===== */
+        .container {
+            max-width: 1280px;
+            margin: 0 auto;
+            padding: 24px 20px;
+        }
+
+        /* ===== Header ===== */
+        .header {
+            text-align: center;
+            padding: 40px 20px 30px;
+            border-bottom: 1px solid #30363d;
+            margin-bottom: 32px;
+        }
+
+        .logo {
+            display: inline-block;
+            margin-bottom: 16px;
+        }
+
+        .logo svg { width: 64px; height: 64px; }
+
+        .header h1 {
+            font-size: 2.2rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #58a6ff, #a371f7, #f778ba);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 8px;
+        }
+
+        .header .meta {
+            color: #8b949e;
+            font-size: 0.9rem;
+        }
+
+        .header .meta span {
+            margin: 0 12px;
+        }
+
+        /* ===== Security Gate Banner ===== */
+        .gate-banner {
+            text-align: center;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 32px;
+            font-size: 1.4rem;
+            font-weight: 700;
+            letter-spacing: 1px;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        .gate-passed {
+            background: linear-gradient(135deg, rgba(35, 134, 54, 0.3), rgba(46, 160, 67, 0.15));
+            border: 2px solid #238636;
+            color: #3fb950;
+        }
+
+        .gate-failed {
+            background: linear-gradient(135deg, rgba(218, 54, 51, 0.3), rgba(248, 81, 73, 0.15));
+            border: 2px solid #da3633;
+            color: #f85149;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.01); }
+        }
+
+        /* ===== Summary Cards ===== */
+        .cards-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+
+        .card {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 12px;
+            padding: 20px 16px;
+            text-align: center;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+        }
+
+        .card .icon {
+            font-size: 1.8rem;
+            margin-bottom: 8px;
+        }
+
+        .card .count {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .card .label {
+            font-size: 0.85rem;
+            color: #8b949e;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .card-total { border-top: 3px solid #a371f7; }
+        .card-total .count { color: #a371f7; }
+
+        .card-critical { border-top: 3px solid #f85149; }
+        .card-critical .count { color: #f85149; }
+
+        .card-high { border-top: 3px solid #f0883e; }
+        .card-high .count { color: #f0883e; }
+
+        .card-medium { border-top: 3px solid #d29922; }
+        .card-medium .count { color: #d29922; }
+
+        .card-low { border-top: 3px solid #58a6ff; }
+        .card-low .count { color: #58a6ff; }
+
+        .card-info { border-top: 3px solid #8b949e; }
+        .card-info .count { color: #8b949e; }
+
+        /* ===== Charts Section ===== */
+        .charts-section {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+            margin-bottom: 32px;
+        }
+
+        @media (max-width: 768px) {
+            .charts-section { grid-template-columns: 1fr; }
+        }
+
+        .chart-container {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 12px;
+            padding: 24px;
+        }
+
+        .chart-container h3 {
+            font-size: 1.1rem;
+            color: #e6edf3;
+            margin-bottom: 16px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #30363d;
+        }
+
+        .chart-wrapper {
+            position: relative;
+            max-height: 300px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* ===== Findings Table ===== */
+        .findings-section {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 32px;
+            overflow-x: auto;
+        }
+
+        .findings-section h3 {
+            font-size: 1.1rem;
+            color: #e6edf3;
+            margin-bottom: 16px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #30363d;
+        }
+
+        .findings-controls {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+
+        .filter-btn {
+            padding: 6px 14px;
+            border-radius: 20px;
+            border: 1px solid #30363d;
+            background: transparent;
+            color: #8b949e;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: all 0.2s;
+        }
+
+        .filter-btn:hover, .filter-btn.active {
+            background: #30363d;
+            color: #e6edf3;
+        }
+
+        .search-input {
+            padding: 6px 14px;
+            border-radius: 8px;
+            border: 1px solid #30363d;
+            background: #0d1117;
+            color: #e6edf3;
+            font-size: 0.85rem;
+            min-width: 200px;
+        }
+
+        .search-input::placeholder { color: #484f58; }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+        }
+
+        thead th {
+            text-align: left;
+            padding: 12px 16px;
+            border-bottom: 2px solid #30363d;
+            color: #8b949e;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            letter-spacing: 0.5px;
+            cursor: pointer;
+            user-select: none;
+            white-space: nowrap;
+        }
+
+        thead th:hover { color: #e6edf3; }
+        thead th::after { content: ' ↕'; opacity: 0.3; }
+
+        tbody tr {
+            border-bottom: 1px solid #21262d;
+            transition: background 0.15s;
+        }
+
+        tbody tr:nth-child(even) { background: rgba(22, 27, 34, 0.5); }
+        tbody tr:hover { background: rgba(48, 54, 61, 0.4); }
+
+        tbody td {
+            padding: 10px 16px;
+            vertical-align: top;
+        }
+
+        .severity-badge {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .badge-critical { background: rgba(248, 81, 73, 0.2); color: #f85149; border: 1px solid #f85149; }
+        .badge-high { background: rgba(240, 136, 62, 0.2); color: #f0883e; border: 1px solid #f0883e; }
+        .badge-medium { background: rgba(210, 153, 34, 0.2); color: #d29922; border: 1px solid #d29922; }
+        .badge-low { background: rgba(88, 166, 255, 0.2); color: #58a6ff; border: 1px solid #58a6ff; }
+        .badge-info { background: rgba(139, 148, 158, 0.2); color: #8b949e; border: 1px solid #8b949e; }
+
+        .tool-tag {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 6px;
+            background: rgba(163, 113, 247, 0.15);
+            color: #a371f7;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+
+        .file-path {
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+            font-size: 0.8rem;
+            color: #79c0ff;
+        }
+
+        .description-cell {
+            max-width: 400px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .description-cell:hover {
+            white-space: normal;
+            overflow: visible;
+        }
+
+        .no-findings {
+            text-align: center;
+            padding: 40px;
+            color: #8b949e;
+            font-size: 1.1rem;
+        }
+
+        /* ===== Footer ===== */
+        .footer {
+            text-align: center;
+            padding: 24px;
+            border-top: 1px solid #30363d;
+            color: #484f58;
+            font-size: 0.8rem;
+        }
+
+        .footer a {
+            color: #58a6ff;
+            text-decoration: none;
+        }
+
+        .footer a:hover { text-decoration: underline; }
+
+        /* ===== Responsive ===== */
+        @media (max-width: 640px) {
+            .header h1 { font-size: 1.5rem; }
+            .cards-row { grid-template-columns: repeat(2, 1fr); }
+            .card .count { font-size: 1.5rem; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+
+    <!-- Header -->
+    <div class="header">
+        <div class="logo">
+            <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="4" y="4" width="56" height="56" rx="12" fill="#0d1117" stroke="url(#grad)" stroke-width="2"/>
+                <defs>
+                    <linearGradient id="grad" x1="0" y1="0" x2="64" y2="64">
+                        <stop offset="0%" style="stop-color:#58a6ff"/>
+                        <stop offset="50%" style="stop-color:#a371f7"/>
+                        <stop offset="100%" style="stop-color:#f778ba"/>
+                    </linearGradient>
+                </defs>
+                <path d="M32 14L32 18M32 46L32 50M14 32L18 32M46 32L50 32" stroke="#58a6ff" stroke-width="2" stroke-linecap="round"/>
+                <circle cx="32" cy="32" r="10" stroke="#a371f7" stroke-width="2" fill="none"/>
+                <circle cx="32" cy="32" r="4" fill="#f778ba"/>
+                <path d="M22 22L25 25M39 39L42 42M42 22L39 25M25 39L22 42" stroke="#8b949e" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+        </div>
+        <h1>🛡️ SecPipeline Security Report</h1>
+        <div class="meta">
+            <span>📅 {{ scan_date }}</span>
+            <span>|</span>
+            <span>🏗️ SecPipeline</span>
+            <span>|</span>
+            <span>📊 {{ total_findings }} Findings</span>
+        </div>
+    </div>
+
+    <!-- Security Gate Banner -->
+    {% if gate_status == 'PASSED' %}
+    <div class="gate-banner gate-passed">
+        ✅ SECURITY GATE: PASSED — No critical vulnerabilities detected
+    </div>
+    {% else %}
+    <div class="gate-banner gate-failed">
+        ❌ SECURITY GATE: FAILED — Critical vulnerabilities found!
+    </div>
+    {% endif %}
+
+    <!-- Summary Cards -->
+    <div class="cards-row">
+        <div class="card card-total">
+            <div class="icon">📊</div>
+            <div class="count">{{ total_findings }}</div>
+            <div class="label">Total Findings</div>
+        </div>
+        <div class="card card-critical">
+            <div class="icon">🔴</div>
+            <div class="count">{{ critical_count }}</div>
+            <div class="label">Critical</div>
+        </div>
+        <div class="card card-high">
+            <div class="icon">🟠</div>
+            <div class="count">{{ high_count }}</div>
+            <div class="label">High</div>
+        </div>
+        <div class="card card-medium">
+            <div class="icon">🟡</div>
+            <div class="count">{{ medium_count }}</div>
+            <div class="label">Medium</div>
+        </div>
+        <div class="card card-low">
+            <div class="icon">🔵</div>
+            <div class="count">{{ low_count }}</div>
+            <div class="label">Low</div>
+        </div>
+        <div class="card card-info">
+            <div class="icon">⚪</div>
+            <div class="count">{{ info_count }}</div>
+            <div class="label">Info</div>
+        </div>
+    </div>
+
+    <!-- Charts -->
+    <div class="charts-section">
+        <div class="chart-container">
+            <h3>📈 Severity Distribution</h3>
+            <div class="chart-wrapper">
+                <canvas id="severityChart"></canvas>
+            </div>
+        </div>
+        <div class="chart-container">
+            <h3>🔧 Findings by Tool</h3>
+            <div class="chart-wrapper">
+                <canvas id="toolChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Findings Table -->
+    <div class="findings-section">
+        <h3>🔎 Detailed Findings</h3>
+
+        <div class="findings-controls">
+            <button class="filter-btn active" onclick="filterFindings('ALL')">All</button>
+            <button class="filter-btn" onclick="filterFindings('CRITICAL')">Critical</button>
+            <button class="filter-btn" onclick="filterFindings('HIGH')">High</button>
+            <button class="filter-btn" onclick="filterFindings('MEDIUM')">Medium</button>
+            <button class="filter-btn" onclick="filterFindings('LOW')">Low</button>
+            <button class="filter-btn" onclick="filterFindings('INFO')">Info</button>
+            <input type="text" class="search-input" id="searchInput" placeholder="🔍 Search findings..." oninput="searchFindings(this.value)">
+        </div>
+
+        {% if findings %}
+        <table id="findingsTable">
+            <thead>
+                <tr>
+                    <th onclick="sortTable(0)">Severity</th>
+                    <th onclick="sortTable(1)">Tool</th>
+                    <th onclick="sortTable(2)">Title</th>
+                    <th onclick="sortTable(3)">Description</th>
+                    <th onclick="sortTable(4)">File</th>
+                    <th onclick="sortTable(5)">Line</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for f in findings %}
+                <tr data-severity="{{ f.severity }}">
+                    <td><span class="severity-badge badge-{{ f.severity|lower }}">{{ f.severity }}</span></td>
+                    <td><span class="tool-tag">{{ f.tool }}</span></td>
+                    <td>{{ f.title }}</td>
+                    <td class="description-cell" title="{{ f.description }}">{{ f.description }}</td>
+                    <td class="file-path">{{ f.file }}</td>
+                    <td>{{ f.line }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="no-findings">
+            🎉 No findings detected — your code looks clean!
+        </div>
+        {% endif %}
+    </div>
+
+</div>
+
+<!-- Footer -->
+<div class="footer">
+    <p>Generated by <strong>🛡️ SecPipeline</strong> • {{ scan_date }}</p>
+    <p><a href="https://github.com/NNTung293/secpipeline" target="_blank">github.com/NNTung293/secpipeline</a></p>
+</div>
+
+<script>
+    // ===== Charts =====
+    const severityData = {{ severity_data }};
+
+    // Donut Chart - Severity Distribution
+    if (document.getElementById('severityChart')) {
+        new Chart(document.getElementById('severityChart'), {
+            type: 'doughnut',
+            data: {
+                labels: severityData.labels,
+                datasets: [{
+                    data: severityData.values,
+                    backgroundColor: severityData.colors,
+                    borderColor: '#0d1117',
+                    borderWidth: 3,
+                    hoverBorderWidth: 0,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                cutout: '65%',
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { color: '#8b949e', padding: 16, font: { size: 12 } }
+                    }
+                }
+            }
+        });
+    }
+
+    // Bar Chart - Findings by Tool
+    const toolStats = {{ tool_stats | tojson }};
+    const toolLabels = Object.keys(toolStats);
+    const toolValues = Object.values(toolStats);
+    const toolColors = ['#58a6ff', '#a371f7', '#f778ba', '#3fb950', '#d29922', '#f0883e'];
+
+    if (document.getElementById('toolChart')) {
+        new Chart(document.getElementById('toolChart'), {
+            type: 'bar',
+            data: {
+                labels: toolLabels,
+                datasets: [{
+                    label: 'Findings',
+                    data: toolValues,
+                    backgroundColor: toolColors.slice(0, toolLabels.length),
+                    borderRadius: 6,
+                    borderSkipped: false,
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    x: {
+                        ticks: { color: '#8b949e' },
+                        grid: { color: '#21262d' }
+                    },
+                    y: {
+                        ticks: { color: '#8b949e' },
+                        grid: { display: false }
+                    }
+                }
+            }
+        });
+    }
+
+    // ===== Table Filtering =====
+    function filterFindings(severity) {
+        const rows = document.querySelectorAll('#findingsTable tbody tr');
+        const buttons = document.querySelectorAll('.filter-btn');
+
+        buttons.forEach(btn => btn.classList.remove('active'));
+        event.target.classList.add('active');
+
+        rows.forEach(row => {
+            if (severity === 'ALL' || row.dataset.severity === severity) {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
+            }
+        });
+    }
+
+    // ===== Table Search =====
+    function searchFindings(query) {
+        const rows = document.querySelectorAll('#findingsTable tbody tr');
+        const q = query.toLowerCase();
+
+        rows.forEach(row => {
+            const text = row.textContent.toLowerCase();
+            row.style.display = text.includes(q) ? '' : 'none';
+        });
+    }
+
+    // ===== Table Sorting =====
+    let sortDirection = {};
+    function sortTable(columnIndex) {
+        const table = document.getElementById('findingsTable');
+        if (!table) return;
+        const tbody = table.querySelector('tbody');
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+
+        sortDirection[columnIndex] = !sortDirection[columnIndex];
+        const dir = sortDirection[columnIndex] ? 1 : -1;
+
+        rows.sort((a, b) => {
+            const aText = a.cells[columnIndex].textContent.trim();
+            const bText = b.cells[columnIndex].textContent.trim();
+            return dir * aText.localeCompare(bText, undefined, { numeric: true });
+        });
+
+        rows.forEach(row => tbody.appendChild(row));
+    }
+</script>
+
+</body>
+</html>
