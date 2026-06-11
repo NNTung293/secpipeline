@@ -188,9 +188,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Build and start application
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Start application
         run: |
-          docker compose up -d --build
+          python app/main.py &
           echo "Waiting for app to be ready..."
           for i in $(seq 1 30); do
             if curl -s http://localhost:5000/health > /dev/null 2>&1; then
@@ -218,7 +224,7 @@ jobs:
             report_json.json
       - name: Stop application
         if: always()
-        run: docker compose down
+        run: kill $(lsof -t -i:5000) 2>/dev/null || true
 
   # ===== Stage 7: Security Report =====
   security-report:
