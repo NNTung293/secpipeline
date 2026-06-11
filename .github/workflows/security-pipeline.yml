@@ -207,12 +207,18 @@ jobs:
             sleep 2
           done
       - name: OWASP ZAP Baseline Scan
-        uses: zaproxy/action-baseline@v0.14.0
-        with:
-          target: 'http://localhost:5000'
-          rules_file_name: '.zap/rules.tsv'
-          cmd_options: '-a -j'
-          allow_issue_writing: false
+        run: |
+          # Run ZAP with --network host so it can reach localhost:5000
+          docker run --network host \
+            -v $(pwd)/.zap:/zap/wrk/.zap:ro \
+            -v $(pwd)/zap-out:/zap/wrk:rw \
+            --rm ghcr.io/zaproxy/zaproxy:stable \
+            zap-baseline.py \
+            -t http://localhost:5000 \
+            -c .zap/rules.tsv \
+            -J report_json.json \
+            -r report_html.html \
+            -a -j || true
         continue-on-error: true
       - name: Upload ZAP Report
         if: always()
@@ -220,8 +226,8 @@ jobs:
         with:
           name: zap-results
           path: |
-            report_html.html
-            report_json.json
+            zap-out/report_html.html
+            zap-out/report_json.json
       - name: Stop application
         if: always()
         run: kill $(lsof -t -i:5000) 2>/dev/null || true
