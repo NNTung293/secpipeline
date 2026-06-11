@@ -191,7 +191,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.9'  # Match Dockerfile base — old deps (PyYAML 5.4.1) don't build on 3.11+
       - name: Install dependencies
         run: pip install -r requirements.txt
       - name: Start application
